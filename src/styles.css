@@ -1,0 +1,23 @@
+* {
+  margin: 0;
+}
+
+body, html, .container {
+  height: 100%;
+}
+
+body {
+  background-color: black;
+}
+
+#screen {
+  aspect-ratio: 2;
+  width: 100%;
+}
+
+.vertical-center {
+  position: absolute;
+  top: 50%;
+  -ms-transform: translateY(-50%);
+  transform: translateY(-50%);
+}
