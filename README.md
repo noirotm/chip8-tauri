@@ -1,7 +1,4 @@
-# Tauri + Vanilla
+# CHIP8-Tauri
 
-This template should help get you started developing with Tauri in vanilla HTML, CSS and Javascript.
+This is a [Tauri](https://tauri.app/)-based GUI for the https://github.com/noirotm/chip8 VM.
 
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)

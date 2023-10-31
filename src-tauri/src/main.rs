@@ -1,7 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use bitvec::macros::internal::funty::Fundamental;
 use bitvec::vec::BitVec;
 use chip8_system::display::DisplayMessage;
 use chip8_system::port;
@@ -63,7 +62,7 @@ impl Screen {
 }
 
 fn bitvec_to_pixels(b: &BitVec) -> Vec<bool> {
-    b.iter().map(|v| v.as_bool()).collect()
+    b.iter().by_vals().collect()
 }
 
 impl InputPort<DisplayMessage> for Screen {
@@ -72,7 +71,7 @@ impl InputPort<DisplayMessage> for Screen {
     }
 }
 
-struct Keyboard;
+//struct Keyboard;
 
 fn build_menu() -> Menu {
     Menu::new().add_submenu(Submenu::new(

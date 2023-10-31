@@ -15,19 +15,17 @@ window.addEventListener("DOMContentLoaded", () => {
     ctx = screen.getContext("2d");
 });
 
-appWindow.listen('clear', (event) => {
+appWindow.listen('clear', () => {
     ctx.fillStyle = "rgb(0, 0, 0)";
     ctx.fillRect(0, 0, screen.width, screen.height);
 });
 
-appWindow.listen('draw', ({event, payload}) => {
-    const pixels = payload.pixels;
-
+appWindow.listen('draw', ({_, payload}) => {
     for (let y = 0; y < SCREEN_HEIGHT; y++) {
         for (let x = 0; x < SCREEN_WIDTH; x++) {
             const i = SCREEN_WIDTH * y + x;
 
-            if (pixels[i] === true) {
+            if (payload.pixels[i] === true) {
                 ctx.fillStyle = "rgb(0, 128, 0)";
             } else {
                 ctx.fillStyle = "rgb(0, 0, 0)";

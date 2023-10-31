@@ -12,10 +12,8 @@ body {
 
 #screen {
   aspect-ratio: 2;
+  image-rendering: pixelated;
   width: 100%;
-}
-
-.vertical-center {
   position: absolute;
   top: 50%;
   -ms-transform: translateY(-50%);
