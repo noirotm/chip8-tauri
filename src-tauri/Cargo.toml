@@ -13,6 +13,7 @@ edition = "2021"
 tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
+anyhow = "1.0.75"
 bitvec = "1.0.1"
 chip8-system = { git = "https://github.com/noirotm/chip8" }
 crossbeam-channel = "0.5.8"

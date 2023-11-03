@@ -1,15 +1,20 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use anyhow::anyhow;
 use bitvec::vec::BitVec;
 use chip8_system::display::DisplayMessage;
+use chip8_system::keyboard::{KeyState, KeyboardMessage};
+use chip8_system::keyboard_map::KeyboardMap;
 use chip8_system::port;
-use chip8_system::port::InputPort;
+use chip8_system::port::{InputPort, OutputPort};
 use chip8_system::system::System;
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Receiver, Sender};
+use sound_cpal::Beeper;
+use std::path::Path;
 use std::thread;
 use tauri::api::dialog::FileDialogBuilder;
-use tauri::{AppHandle, CustomMenuItem, Manager, Menu, MenuItem, Submenu};
+use tauri::{AppHandle, CustomMenuItem, Manager, Menu, MenuItem, Runtime, State, Submenu, Window};
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 /*#[tauri::command]
@@ -17,14 +22,8 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }*/
 
-struct AppState {
-    chip8: System,
-    screen: Screen,
-    //kb: Keyboard,
-}
-
 #[derive(Clone, serde::Serialize)]
-struct Payload {
+struct DrawEventPayload {
     pixels: Vec<bool>,
 }
 
@@ -33,12 +32,12 @@ struct Screen {
 }
 
 impl Screen {
-    fn new(h: AppHandle) -> Self {
+    fn new<R: Runtime>(app: AppHandle<R>) -> Self {
         let (ds, dr) = crossbeam_channel::bounded(128);
 
         thread::spawn(move || {
             while let Ok(msg) = dr.recv() {
-                if let Some(w) = h.get_window("main") {
+                if let Some(w) = app.get_window("main") {
                     match msg {
                         DisplayMessage::Clear => {
                             w.emit("clear", ()).unwrap();
@@ -46,8 +45,8 @@ impl Screen {
                         DisplayMessage::Update(b) => {
                             w.emit(
                                 "draw",
-                                Payload {
-                                    pixels: bitvec_to_pixels(&b),
+                                DrawEventPayload {
+                                    pixels: b.iter().by_vals().collect(),
                                 },
                             )
                             .unwrap();
@@ -61,17 +60,39 @@ impl Screen {
     }
 }
 
-fn bitvec_to_pixels(b: &BitVec) -> Vec<bool> {
-    b.iter().by_vals().collect()
-}
-
 impl InputPort<DisplayMessage> for Screen {
     fn input(&self) -> Sender<DisplayMessage> {
         self.display_sender.clone()
     }
 }
 
-//struct Keyboard;
+struct Keyboard {
+    keyboard_receiver: Receiver<KeyboardMessage>,
+}
+
+impl OutputPort<KeyboardMessage> for Keyboard {
+    fn output(&self) -> Receiver<KeyboardMessage> {
+        self.keyboard_receiver.clone()
+    }
+}
+
+#[tauri::command]
+fn key_down(key: &str, state: State<AppState>) {
+    if let Some(key) = state.keyboard_map.key(key) {
+        _ = state
+            .keyboard_sender
+            .try_send(KeyboardMessage::new(KeyState::Down, key));
+    }
+}
+
+#[tauri::command]
+fn key_up(key: &str, state: State<AppState>) {
+    if let Some(key) = state.keyboard_map.key(key) {
+        _ = state
+            .keyboard_sender
+            .try_send(KeyboardMessage::new(KeyState::Up, key));
+    }
+}
 
 fn build_menu() -> Menu {
     Menu::new().add_submenu(Submenu::new(
@@ -83,37 +104,65 @@ fn build_menu() -> Menu {
     ))
 }
 
+fn load_image<R: Runtime>(kb_receiver: Receiver<KeyboardMessage>, window: &Window<R>) {
+    let app = window.app_handle();
+    FileDialogBuilder::new()
+        .set_title("Load CHIP-8 ROM")
+        .set_parent(window)
+        .add_filter("CHIP-8 ROMs", &["c8", "ch8"])
+        .pick_file(move |p| {
+            if let Some(p) = p {
+                let r = run_chip8(p, kb_receiver, app);
+
+                if r.is_err() {}
+            }
+        });
+}
+
+fn run_chip8<P: AsRef<Path>, R: Runtime>(
+    path: P,
+    kb_receiver: Receiver<KeyboardMessage>,
+    app: AppHandle<R>,
+) -> anyhow::Result<()> {
+    let mut chip8 = System::new();
+
+    let screen = Screen::new(app);
+    port::connect(&chip8.display, &screen);
+
+    let beep = Beeper::new().map_err(|e| anyhow!("{}", e))?;
+    port::connect(&chip8.sound_timer, &beep);
+
+    let keyboard = Keyboard {
+        keyboard_receiver: kb_receiver,
+    };
+    port::connect(&keyboard, &chip8.keyboard);
+
+    chip8.load_image(path)?;
+    chip8.run().map_err(|e| e.into())
+}
+
+struct AppState {
+    keyboard_sender: Sender<KeyboardMessage>,
+    keyboard_map: KeyboardMap,
+}
+
 fn main() {
+    let (kb_sender, kb_receiver) = crossbeam_channel::bounded::<KeyboardMessage>(128);
+
     tauri::Builder::default()
         .menu(build_menu())
-        .on_menu_event(|event| match event.menu_item_id() {
-            "load" => {
-                FileDialogBuilder::new()
-                    .set_title("Load CHIP-8 ROM")
-                    .set_parent(event.window())
-                    .add_filter("CHIP-8 ROMs", &["c8", "ch8"])
-                    .pick_file(move |p| {
-                        if let Some(p) = p {
-                            let mut app = AppState {
-                                chip8: System::new(),
-                                screen: Screen::new(event.window().app_handle()),
-                                //kb: Keyboard,
-                            };
-
-                            port::connect(&app.chip8.display, &app.screen);
-
-                            if app.chip8.load_image(&p).is_ok() {
-                                _ = app.chip8.run();
-                            }
-                        }
-                    });
-            }
+        .manage(AppState {
+            keyboard_sender: kb_sender,
+            keyboard_map: Default::default(),
+        })
+        .on_menu_event(move |event| match event.menu_item_id() {
+            "load" => load_image(kb_receiver.clone(), event.window()),
             "quit" => {
                 event.window().close().unwrap();
             }
             _ => {}
         })
-        //.invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![key_down, key_up])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
