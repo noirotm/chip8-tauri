@@ -7,10 +7,11 @@ use chip8_system::keyboard::KeyboardMessage;
 use chip8_system::keyboard_map::KeyboardMap;
 use chip8_system::port;
 use chip8_system::port::{InputPort, OutputPort};
-use chip8_system::system::System;
+use chip8_system::system::{System, SystemController};
 use crossbeam_channel::{Receiver, Sender};
 use sound_cpal::Beeper;
 use std::path::Path;
+use std::sync::Mutex;
 use std::thread;
 use tauri::api::dialog::FileDialogBuilder;
 use tauri::{AppHandle, CustomMenuItem, Manager, Menu, MenuItem, Runtime, State, Submenu, Window};
@@ -114,6 +115,18 @@ fn run_chip8<P: AsRef<Path>, R: Runtime>(
 ) -> anyhow::Result<()> {
     let mut chip8 = System::new();
 
+    {
+        let s: State<AppState> = app.state();
+        let mut lock = s.controller.lock().expect("a valid lock");
+
+        // stop previous instance if present
+        if let Some(c) = lock.as_ref() {
+            c.stop()
+        }
+
+        *lock = Some(chip8.controller());
+    }
+
     let screen = Screen::new(app);
     port::connect(&chip8.display, &screen);
 
@@ -132,6 +145,7 @@ fn run_chip8<P: AsRef<Path>, R: Runtime>(
 struct AppState {
     keyboard_sender: Sender<KeyboardMessage>,
     keyboard_map: KeyboardMap,
+    controller: Mutex<Option<SystemController>>,
 }
 
 fn main() {
@@ -142,6 +156,7 @@ fn main() {
         .manage(AppState {
             keyboard_sender: kb_sender,
             keyboard_map: Default::default(),
+            controller: Mutex::new(None),
         })
         .on_menu_event(move |event| match event.menu_item_id() {
             "load" => load_image(kb_receiver.clone(), event.window()),
