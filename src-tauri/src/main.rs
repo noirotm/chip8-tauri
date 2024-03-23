@@ -2,9 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use anyhow::anyhow;
-use bitvec::vec::BitVec;
 use chip8_system::display::DisplayMessage;
-use chip8_system::keyboard::{KeyState, KeyboardMessage};
+use chip8_system::keyboard::KeyboardMessage;
 use chip8_system::keyboard_map::KeyboardMap;
 use chip8_system::port;
 use chip8_system::port::{InputPort, OutputPort};
@@ -15,12 +14,6 @@ use std::path::Path;
 use std::thread;
 use tauri::api::dialog::FileDialogBuilder;
 use tauri::{AppHandle, CustomMenuItem, Manager, Menu, MenuItem, Runtime, State, Submenu, Window};
-
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-/*#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}*/
 
 #[derive(Clone, serde::Serialize)]
 struct DrawEventPayload {
@@ -37,20 +30,19 @@ impl Screen {
 
         thread::spawn(move || {
             while let Ok(msg) = dr.recv() {
-                if let Some(w) = app.get_window("main") {
-                    match msg {
-                        DisplayMessage::Clear => {
-                            w.emit("clear", ()).unwrap();
-                        }
-                        DisplayMessage::Update(b) => {
-                            w.emit(
-                                "draw",
-                                DrawEventPayload {
-                                    pixels: b.iter().by_vals().collect(),
-                                },
-                            )
-                            .unwrap();
-                        }
+                let w = app.get_window("main").expect("main window");
+                match msg {
+                    DisplayMessage::Clear => {
+                        w.emit("clear", ()).unwrap();
+                    }
+                    DisplayMessage::Update(b) => {
+                        w.emit(
+                            "draw",
+                            DrawEventPayload {
+                                pixels: b.iter().by_vals().collect(),
+                            },
+                        )
+                        .unwrap();
                     }
                 }
             }
@@ -79,18 +71,14 @@ impl OutputPort<KeyboardMessage> for Keyboard {
 #[tauri::command]
 fn key_down(key: &str, state: State<AppState>) {
     if let Some(key) = state.keyboard_map.key(key) {
-        _ = state
-            .keyboard_sender
-            .try_send(KeyboardMessage::new(KeyState::Down, key));
+        _ = state.keyboard_sender.try_send(KeyboardMessage::down(key));
     }
 }
 
 #[tauri::command]
 fn key_up(key: &str, state: State<AppState>) {
     if let Some(key) = state.keyboard_map.key(key) {
-        _ = state
-            .keyboard_sender
-            .try_send(KeyboardMessage::new(KeyState::Up, key));
+        _ = state.keyboard_sender.try_send(KeyboardMessage::up(key));
     }
 }
 
