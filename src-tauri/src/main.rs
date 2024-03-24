@@ -13,7 +13,8 @@ use sound_cpal::Beeper;
 use std::path::Path;
 use std::sync::Mutex;
 use std::thread;
-use tauri::api::dialog::FileDialogBuilder;
+use tauri::api::dialog::blocking::MessageDialogBuilder;
+use tauri::api::dialog::{FileDialogBuilder, MessageDialogButtons, MessageDialogKind};
 use tauri::{AppHandle, CustomMenuItem, Manager, Menu, MenuItem, Runtime, State, Submenu, Window};
 
 #[derive(Clone, serde::Serialize)]
@@ -95,15 +96,20 @@ fn build_menu() -> Menu {
 
 fn load_image<R: Runtime>(kb_receiver: Receiver<KeyboardMessage>, window: &Window<R>) {
     let app = window.app_handle();
+    let window_clone = window.clone();
     FileDialogBuilder::new()
         .set_title("Load CHIP-8 ROM")
         .set_parent(window)
         .add_filter("CHIP-8 ROMs", &["c8", "ch8"])
         .pick_file(move |p| {
             if let Some(p) = p {
-                let r = run_chip8(p, kb_receiver, app);
-
-                if r.is_err() {}
+                if let Err(e) = run_chip8(p, kb_receiver, app) {
+                    MessageDialogBuilder::new("CHIP-8", format!("Error: {e}"))
+                        .kind(MessageDialogKind::Error)
+                        .buttons(MessageDialogButtons::Ok)
+                        .parent(&window_clone)
+                        .show();
+                }
             }
         });
 }
